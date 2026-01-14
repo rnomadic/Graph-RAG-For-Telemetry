@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graphrag-app
+  namespace: ai-support
+spec:
+  replicas: 3 # Logic layer scales easily on CPU
+  selector:
+    matchLabels:
+      app: graphrag-app
+  template:
+    metadata:
+      labels:
+        app: graphrag-app
+    spec:
+      containers:
+      - name: graphrag-container
+        image: my-registry/graphrag-telemetry:v1.0
+        env:
+          # Pointing LangChain to the internal vLLM service
+          - name: OPENAI_API_BASE
+            value: "http://vllm-service.ai-support.svc.cluster.local/v1" 
+          - name: OPENAI_API_KEY
+            value: "EMPTY" # vLLM doesn't require a key internally
+          - name: LLM_MODEL
+            value: "meta-llama/Meta-Llama-3-70B-Instruct"
+          - name: NEO4J_URI
+            value: "bolt://neo4j-service:7687"
+          - name: NEO4J_USER
+            value: "neo4j"
+          - name: NEO4J_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: neo4j-secrets
+                key: password
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1"

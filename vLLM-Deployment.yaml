@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-server
+  namespace: ai-support
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-server
+  template:
+    metadata:
+      labels:
+        app: vllm-server
+    spec:
+      containers:
+      - name: vllm
+        image: vllm/vllm-openai:latest
+        command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
+        args:
+          - "--model"
+          - "meta-llama/Meta-Llama-3-70B-Instruct"
+          - "--quantization"
+          - "awq" # Using AWQ as discussed for throughput
+          - "--trust-remote-code"
+          - "--port"
+          - "8000"
+        env:
+          - name: HUGGING_FACE_HUB_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: hf-token-secret
+                key: token
+        ports:
+        - containerPort: 8000
+        resources:
+          limits:
+            nvidia.com/gpu: "1" # Requesting A100/H100
+            memory: "32Gi"
+            cpu: "8"
+        volumeMounts:
+          - mountPath: /dev/shm
+            name: dshm
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 10
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-service
+  namespace: ai-support
+spec:
+  selector:
+    app: vllm-server
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: ClusterIP
